@@ -1,0 +1,162 @@
+#include <SoftwareSerial.h>
+
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
+
+#ifndef APSSID
+#define APSSID "HSU_Students" // existing Wifi network
+#define APPSK  "dhhs12cnvch"
+#endif
+
+const char *ssid = APSSID;
+const char *password = APPSK;
+
+ESP8266WebServer server(80);
+MDNSResponder mdns;
+bool status_of_led = LOW;
+
+#define TX_PIN D7 //chân D7 arduino có chức năng của TX
+#define RX_PIN D6 // chân D6 arduino có chức năng của RX
+#include "DHT.h"
+#define dataPin D5 // Defines pin number to which the sensor is connected
+#define DHTTYPE DHT11
+String data;
+int led = D4;
+int flag = 0;
+SoftwareSerial bluetooth(RX_PIN, TX_PIN); //RX_PIN Arduino nối vào chân TX của HC_06 vàTX_PIN Arduino nối với RX của HC_06
+DHT dht(dataPin, DHTTYPE); // Creats a DHT object
+void setup() {
+ Serial.begin(9600);
+ bluetooth.begin(9600);
+
+  Serial.println();
+  Serial.print("Connect to existing Wifi network...");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+  //Tạo trang web server đơn giản điều khiển đn LED
+  pinMode(led, OUTPUT);
+  server.on("/", handleOnConnect);
+  server.on("/turnonLed", handleLedOn);
+  server.on("/turnoffLed", handleLedOff);
+  server.onNotFound(handleNotFound);
+  
+  server.enableCORS(true);
+  
+  server.begin();
+  Serial.println("HTTP server started");
+
+ dht.begin();
+
+ pinMode(led, OUTPUT);
+ pinMode(RX_PIN, INPUT);
+ pinMode(TX_PIN, OUTPUT);
+
+ digitalWrite(led, HIGH);
+ Serial.println("Bluetooth On please press 1 or 0 blink LED");
+}
+void loop() {
+  server.handleClient();
+
+  if (status_of_led)
+  {
+    digitalWrite(led, HIGH);
+  }
+  else
+  {
+    digitalWrite(led, LOW);
+  }
+
+
+ data="read";
+ if (bluetooth.available() > 0) {
+ char c = bluetooth.read();
+ switch (c)
+ {
+ case '1':
+ data = "on";
+ break;
+ case '0':
+ data = "off";
+ break;
+ case '2':
+ data = "read";
+ break;
+ default:
+ break;
+ }
+ }
+
+ if (data.length() > 0) {
+ if(data == "on" ||data == "1")
+ {
+ digitalWrite(led, HIGH);
+ Serial.println("LED On");
+ //led1=on
+ bluetooth.println("on");
+ data="";
+ }
+ else if(data == "off"||data == "0")
+ {
+ digitalWrite(led, LOW);
+ Serial.println("LED Off");
+ //led1=off
+ bluetooth.println("off");
+ data="";
+ }
+ else if(data == "read")
+ {
+//  float h = dht.readHumidity();
+ // // Read temperature as Celsius (the default)
+ float t = dht.readTemperature();
+ // Serial.print("Humidity: ");
+ // Serial.print(h);
+ // Serial.println("%");
+ // Serial.print("Temperature: ");
+ // Serial.print(t);
+ // Serial.println("*C");
+ Serial.println("send data ...");
+ bluetooth.print("Humidity=");
+ bluetooth.print(t); //du lieu tinh
+ Serial.println (t);
+ bluetooth.print(";");
+ bluetooth.println(";#"); //# end message
+
+ delay(1000);
+ }
+
+ }
+}
+void handleOnConnect() {
+  status_of_led = LOW;
+  Serial.println("D6 Status: "+status_of_led);
+  server.send(200, "text/html", "ok"); 
+}
+void handleLivingRoom() {
+  float temperature = 24.6;
+  server.send(200, "text/html","ok"); 
+}
+
+void handleLedOn() {
+  status_of_led = HIGH;
+  Serial.println("D6 Status: ON");
+  server.send(200, "text/html", "ok"); 
+}
+
+void handleLedOff() {
+  status_of_led = LOW;
+  Serial.println("D6 Status: OFF");
+  server.send(200, "text/html","ok"); 
+}
+
+void handleNotFound(){
+  server.send(404, "text/plain", "Not found");
+}
